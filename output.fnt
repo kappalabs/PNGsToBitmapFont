@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<font>
+<info aa="1" alphaChnl="1" base="?" blueChnl="0" bold="1" charset="" face="Belisa plumilla manual" greenChnl="0" italic="0" lineHeight="?" outline="2" packed="0" padding="4,4,4,4" pages="1" redChnl="0" scaleH="?" scaleW="?" size="50" smooth="1" spacing="4,4" stretchH="100" unicode="1"/>
+<common/>
+<pages>
+<page file="output.png" id="0"/>
+</pages>
+<chars count="1">
+<char chnl="0" height="5" id="1" page="9" width="4" x="2" xadvance="8" xoffset="6" y="3" yoffset="7"/>
+</chars>
+</font>
