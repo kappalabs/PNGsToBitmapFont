@@ -1,6 +1,8 @@
 
 package pngstofont;
 
+import java.awt.Color;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -49,15 +51,17 @@ public class PNGsToFONT {
     private final static String FNTOUTPUT = "font.fnt";
     
     private final static int XOFFSET = 0;
-    private final static int YOFFSET = -7;
     private final static int PAGE = 0;
     private final static int CHNL = 15;
     
     private List<File> srcfiles;
     private int[] outparams;
     private Letter[] letters;
+    
+    private boolean debug = false;
 
     public PNGsToFONT() {
+        debug = true;
         if (!init(PATH)) {
             System.out.println("Nothing to be done! Exiting...");
             System.exit(0);
@@ -156,11 +160,14 @@ public class PNGsToFONT {
                 
                 int char_value = Integer.parseInt(files.get(i).getName().replace(".png", ""));
                 
-                letters[i] = new Letter(char_value, act_x, act_y, letw, leth, XOFFSET, height-leth, letw, PAGE, CHNL);
+                letters[i] = new Letter(char_value, act_x, act_y, letw, leth, XOFFSET, height-leth, (int)(letw/1.3), PAGE, CHNL);
                 g.drawImage(image, act_x, act_y, null);
-//                g.setColor(Color.red);
-//                g.drawRect(act_x, act_y, letw, leth);
-//                g.drawString(""+char_value, act_x, act_y);
+                if (debug) {
+                    g.setColor(Color.red);
+                    g.drawRect(act_x, act_y, letw, leth);
+                    FontMetrics fm = g.getFontMetrics();
+                    g.drawString(""+char_value, act_x, act_y+leth+fm.getHeight());
+                }
                 
                 if(++act_px/max_in_row >= 1.0) {
                     act_px=0; act_py++;
