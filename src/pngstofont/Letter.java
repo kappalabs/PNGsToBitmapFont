@@ -1,6 +1,8 @@
 
 package pngstofont;
 
+import java.awt.image.BufferedImage;
+
 /**
  *
  * @author Coder Kap' <fojjta.wgz.cz>

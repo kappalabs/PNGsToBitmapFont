@@ -6,6 +6,8 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -35,22 +37,23 @@ import org.w3c.dom.Element;
  * 13.09.14.14 - It can now save files into one bitmap image.
  * 13.09.14.16 - It can now save files into one bitmap image + save .fnt (XML based)
  *               file containing information about letters.
+ * 13.09.16.0  - It can now load bitmap font from .fnt & .png, crop these chars, save them
+ *               and then later it can again assemble them
  * 
  */
 public class PNGsToFONT {
     
-    private final static String PATH = "/home/kap/Plocha/mkfont/";
+    public final static String PATH = "/home/kap/Plocha/mkfont/";
     private final static String SUFFIX = ".png";
-    private final static String BMPOUTPUT = "output.png";
-    private final static String FNTOUTPUT = "output.fnt";
+    private final static String BMPOUTPUT = "font.png";
+    private final static String FNTOUTPUT = "font.fnt";
     
-    private final static int XOFFSET = -6;
+    private final static int XOFFSET = 0;
     private final static int YOFFSET = -7;
-    private final static int XADVANCE = 11;
     private final static int PAGE = 0;
     private final static int CHNL = 15;
     
-    private List<String> srcfiles;
+    private List<File> srcfiles;
     private int[] outparams;
     private Letter[] letters;
 
@@ -63,19 +66,27 @@ public class PNGsToFONT {
     }
     
     private boolean init(String path) {
-        srcfiles = searchFolderForNumberedPNGFiles(path, SUFFIX, false);
+        srcfiles = searchFolderForNumberedPNGFiles(path, SUFFIX, true);
         if (srcfiles.isEmpty()) return false;
+        srcfiles = sortFiles(srcfiles);
         outparams = goThrough(path, srcfiles);
         letters = new Letter[srcfiles.size()];
         
         System.out.println(srcfiles.size()+" files will be processed.");
-        for (String s : srcfiles) System.out.println("Input file: "+s);
+        for (File f : srcfiles) System.out.println("Input file: "+f.getName());
         return true;
     }
     
     private void process(String path) {
         outputBitmap(outparams[0], outparams[1], outparams[2], path, srcfiles);
-        xmltry(letters);
+        xmltry(letters, outparams[2]);
+    }
+    
+    private List<File> sortFiles(List<File> files) {
+        ObjectComparator comparator = new ObjectComparator();
+        Collections.sort(files, comparator);
+//        Collections.sort( files );
+        return files;
     }
     
     /**
@@ -85,29 +96,30 @@ public class PNGsToFONT {
      * @param recursively allows recursive searching
      * @return List of file names with specific suffix & number in name.
      */
-    List<String> searchFolderForNumberedPNGFiles(String pathToFolder, String suffix, boolean recursively) {
-        List<String> textFiles = new ArrayList<>();
+    List<File> searchFolderForNumberedPNGFiles(String pathToFolder, String suffix, boolean recursively) {
+        List<File> textFiles = new ArrayList<>();
         File dir = new File(pathToFolder);
         for (File file : dir.listFiles()) {
             if (file.getName().toLowerCase().matches("\\d+.png$"))
-                textFiles.add(file.getName());
+                textFiles.add(file);
             else if (recursively && file.isDirectory())
                 textFiles.addAll(searchFolderForNumberedPNGFiles(file.getAbsolutePath(), suffix, true));
         }
         
         return textFiles;
 }
+    
     /**
      * This method finds out appropriate dimensions of output image and size of single letter.
      * @param path
      * @param files
      * @return 
      */
-    int[] goThrough(String path, List<String> files) {
+    int[] goThrough(String path, List<File> files) {
         int m_w=0, m_h=0;
         for (int i=0; i<files.size(); i++) {
             try {
-                BufferedImage image = ImageIO.read(new File(path, files.get(i)));
+                BufferedImage image = ImageIO.read(files.get(i));
                 m_w = Math.max(m_w, image.getWidth());
                 m_h = Math.max(m_h, image.getHeight());
             } catch (IOException ex) {
@@ -119,11 +131,12 @@ public class PNGsToFONT {
         int v = (int)Math.round(Math.ceil(Math.sqrt(m_w*m_h*files.size())));
         int pow=0;
         while (Math.pow(2, pow)<v) pow++;
+//        while (Math.pow(2, pow)<v || Math.floor(Math.pow(2, pow)/m_w)*m_h>Math.pow(2, pow)) pow++;
         
         return new int[]{m_w, m_h, (int)Math.pow(2, pow)};
     }
     
-    void outputBitmap(int width, int height, int dimensions, String path, List<String> files) {
+    void outputBitmap(int width, int height, int dimensions, String path, List<File> files) {
         try {
             BufferedImage combined = new BufferedImage(dimensions, dimensions, BufferedImage.TYPE_INT_ARGB);
             // paint both images, preserving the alpha channels
@@ -136,13 +149,18 @@ public class PNGsToFONT {
             
             // for every letter - draw into combined & write to xml
             for (int i=0; i<files.size(); i++) {
-                BufferedImage image = ImageIO.read(new File(path, files.get(i)));
+                BufferedImage image = ImageIO.read(files.get(i));
                 int letw = image.getWidth(), leth = image.getHeight();
                 
                 act_x=act_px*width; act_y=act_py*height;
                 
-                letters[i] = new Letter(Integer.parseInt(files.get(i).replace(".png", "")), act_x, act_y, letw, leth, XOFFSET, YOFFSET, XADVANCE, PAGE, CHNL);
+                int char_value = Integer.parseInt(files.get(i).getName().replace(".png", ""));
+                
+                letters[i] = new Letter(char_value, act_x, act_y, letw, leth, XOFFSET, height-leth, letw, PAGE, CHNL);
                 g.drawImage(image, act_x, act_y, null);
+//                g.setColor(Color.red);
+//                g.drawRect(act_x, act_y, letw, leth);
+//                g.drawString(""+char_value, act_x, act_y);
                 
                 if(++act_px/max_in_row >= 1.0) {
                     act_px=0; act_py++;
@@ -157,7 +175,7 @@ public class PNGsToFONT {
     }
     
     
-    void xmltry(Letter[] letters) {
+    void xmltry(Letter[] letters, int dimensions) {
         try {
  
 		DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
@@ -185,10 +203,10 @@ public class PNGsToFONT {
                 
                 Element common = doc.createElement("common");
                 rootElement.appendChild(common);
-                common.setAttribute("lineHeight", "?");
-                common.setAttribute("base", "?");
-                common.setAttribute("scaleW", "?");
-                common.setAttribute("scaleH", "?");
+                common.setAttribute("lineHeight", "50");
+                common.setAttribute("base", "41");
+                common.setAttribute("scaleW", dimensions+"");
+                common.setAttribute("scaleH", dimensions+"");
                 common.setAttribute("pages", "1");
                 common.setAttribute("packed", "0");
                 common.setAttribute("alphaChnl", "1");
@@ -233,10 +251,22 @@ public class PNGsToFONT {
               System.err.println("Error: "+pce);
 	  }
     }
-
+    
     
     public static void main(String[] args) {
         new PNGsToFONT();
+    }
+
+
+    public class ObjectComparator implements Comparator<File> {
+
+        @Override
+        public int compare(File o1, File o2) {
+            int i1 = Integer.parseInt(o1.getName().replace(".png", ""));
+            int i2 = Integer.parseInt(o2.getName().replace(".png", ""));
+            return Integer.compare(i1, i2);
+        }
+
     }
 
 }
