@@ -27,6 +27,9 @@ import javax.xml.transform.stream.StreamResult;
  
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 /**
  * @author      Coder Kap' <fojjta.cekuj.net>
@@ -41,14 +44,25 @@ import org.w3c.dom.Element;
  *               file containing information about letters.
  * 13.09.16.0  - It can now load bitmap font from .fnt & .png, crop these chars, save them
  *               and then later it can again assemble them
+ * 13.09.16.11 - Removed troubles with head of XML file.
  * 
  */
 public class PNGsToFONT {
     
+    /**
+     * Configuration part!
+     */
+    // Need to be configured on each computer:
     public final static String PATH = "/home/kap/Plocha/mkfont/";
+    public final static String BMPOUTPUT = PATH+"font.png";
+    public final static String FNTOUTPUT = PATH+"font.fnt";
+    public final static String BMPINPUT = PATH+"input/"+"font.png";
+    public final static String FNTINPUT = PATH+"input/"+"font.fnt";
+    /**
+     * End of configuration part!
+     */
+    
     private final static String SUFFIX = ".png";
-    private final static String BMPOUTPUT = "font.png";
-    private final static String FNTOUTPUT = "font.fnt";
     
     private final static int XOFFSET = 0;
     private final static int PAGE = 0;
@@ -62,18 +76,18 @@ public class PNGsToFONT {
 
     public PNGsToFONT() {
 //        debug = true;
-        if (!init(PATH)) {
+        if (!init()) {
             System.out.println("Nothing to be done! Exiting...");
             System.exit(0);
         }
-        process(PATH);
+        process();
     }
     
-    private boolean init(String path) {
-        srcfiles = searchFolderForNumberedPNGFiles(path, SUFFIX, true);
+    private boolean init() {
+        srcfiles = searchFolderForNumberedPNGFiles(PATH, SUFFIX, true);
         if (srcfiles.isEmpty()) return false;
         srcfiles = sortFiles(srcfiles);
-        outparams = goThrough(path, srcfiles);
+        outparams = goThrough(srcfiles);
         letters = new Letter[srcfiles.size()];
         
         System.out.println(srcfiles.size()+" files will be processed.");
@@ -81,15 +95,19 @@ public class PNGsToFONT {
         return true;
     }
     
-    private void process(String path) {
-        outputBitmap(outparams[0], outparams[1], outparams[2], path, srcfiles);
-        xmltry(letters, outparams[2]);
+    private void process() {
+        outputBitmap(outparams[0], outparams[1], outparams[2], srcfiles);
+        xmlWrite(letters, outparams[2]);
     }
     
+    /**
+     * This method just sort files from smallest to biggest nubers in their names.
+     * @param files
+     * @return List of sorted files.
+     */
     private List<File> sortFiles(List<File> files) {
         ObjectComparator comparator = new ObjectComparator();
         Collections.sort(files, comparator);
-//        Collections.sort( files );
         return files;
     }
     
@@ -115,11 +133,10 @@ public class PNGsToFONT {
     
     /**
      * This method finds out appropriate dimensions of output image and size of single letter.
-     * @param path
      * @param files
      * @return 
      */
-    int[] goThrough(String path, List<File> files) {
+    int[] goThrough(List<File> files) {
         int m_w=0, m_h=0;
         for (int i=0; i<files.size(); i++) {
             try {
@@ -138,7 +155,7 @@ public class PNGsToFONT {
         return new int[]{m_w, m_h, (int)Math.pow(2, pow)};
     }
     
-    void outputBitmap(int width, int height, int dimensions, String path, List<File> files) {
+    void outputBitmap(int width, int height, int dimensions, List<File> files) {
         try {
             BufferedImage combined = new BufferedImage(dimensions, dimensions, BufferedImage.TYPE_INT_ARGB);
             // paint both images, preserving the alpha channels
@@ -173,51 +190,47 @@ public class PNGsToFONT {
             }
 
             // Save as new image
-            ImageIO.write(combined, "PNG", new File(path, BMPOUTPUT));
+            ImageIO.write(combined, "PNG", new File(BMPOUTPUT));
         } catch (IOException ex) {
             Logger.getLogger(PNGsToFONT.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
     
     
-    void xmltry(Letter[] letters, int dimensions) {
+    void xmlWrite(Letter[] letters, int dimensions) {
         try {
- 
+                // First, load some information from original .fnt file.
+                DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+                Document doc = dBuilder.parse(new File(FNTINPUT));
+                doc.getDocumentElement().normalize();
+                
+                Node temp = doc.getElementsByTagName("info").item(0);
+                NamedNodeMap infoatribs = temp.getAttributes();
+                temp = doc.getElementsByTagName("common").item(0);
+                NamedNodeMap commonatribs = temp.getAttributes();
+                
+                
+                // Now about the new xml file.
 		DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
 		DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
  
 		// root elements
-		Document doc = docBuilder.newDocument();
+		doc = docBuilder.newDocument();
 		Element rootElement = doc.createElement("font");
 		doc.appendChild(rootElement);
  
                 Element info = doc.createElement("info");
                 rootElement.appendChild(info);
-                info.setAttribute("face", "Belisa plumilla manual");
-                info.setAttribute("size", "50");
-                info.setAttribute("bold", "1");
-                info.setAttribute("italic", "0");
-                info.setAttribute("charset", "");
-                info.setAttribute("unicode", "1");
-                info.setAttribute("stretchH", "100");
-                info.setAttribute("smooth", "1");
-                info.setAttribute("aa", "1");
-                info.setAttribute("padding", "4,4,4,4");
-                info.setAttribute("spacing", "4,4");
-                info.setAttribute("outline", "2");
+                for (int i=0; i<infoatribs.getLength(); i++)
+                    info.setAttribute(infoatribs.item(i).getNodeName(), infoatribs.item(i).getNodeValue());
                 
                 Element common = doc.createElement("common");
                 rootElement.appendChild(common);
-                common.setAttribute("lineHeight", "50");
-                common.setAttribute("base", "41");
+                for (int i=0; i<commonatribs.getLength(); i++)
+                    common.setAttribute(commonatribs.item(i).getNodeName(), commonatribs.item(i).getNodeValue());
                 common.setAttribute("scaleW", dimensions+"");
                 common.setAttribute("scaleH", dimensions+"");
-                common.setAttribute("pages", "1");
-                common.setAttribute("packed", "0");
-                common.setAttribute("alphaChnl", "1");
-                common.setAttribute("redChnl", "0");
-                common.setAttribute("greenChnl", "0");
-                common.setAttribute("blueChnl", "0");
                 
 		// staff elements
 		Element pages = doc.createElement("pages");
@@ -226,7 +239,7 @@ public class PNGsToFONT {
                 Element page = doc.createElement("page");
                 pages.appendChild(page);
                 page.setAttribute("id", "0");
-                page.setAttribute("file", BMPOUTPUT);
+                page.setAttribute("file", new File(BMPOUTPUT).getName());
                 
                 Element chars = doc.createElement("chars");
                 rootElement.appendChild(chars);
@@ -246,15 +259,19 @@ public class PNGsToFONT {
                 transformer.setOutputProperty(OutputKeys.INDENT, "yes");
                 
 		DOMSource source = new DOMSource(doc);
-		StreamResult result = new StreamResult(new File(PATH, FNTOUTPUT));
+		StreamResult result = new StreamResult(new File(FNTOUTPUT));
  
 		transformer.transform(source, result);
  
-		System.out.println("File saved!");
+		System.out.println("File "+FNTOUTPUT+" saved!");
  
 	  } catch (ParserConfigurationException | TransformerException pce) {
               System.err.println("Error: "+pce);
-	  }
+	  } catch (SAXException ex) {
+            Logger.getLogger(PNGsToFONT.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(PNGsToFONT.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     

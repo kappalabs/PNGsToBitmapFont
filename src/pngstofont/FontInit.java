@@ -28,16 +28,21 @@ public class FontInit {
     Letter[] letts;
 
     public FontInit() {
-        letts = readXML(PNGsToFONT.PATH+"font.fnt");
+        letts = readXML(PNGsToFONT.FNTINPUT);
         if (letts==null) {
             System.out.println("Nothing to be done! Exiting...");
             return;
         }
         System.out.println(letts.length+" chars loaded.");
-        savePNGs(PNGsToFONT.PATH+"/font.png");
+        savePNGs(PNGsToFONT.BMPINPUT);
         
     }
     
+    /**
+     * This method reads the original .fnt file and it loads information about letters from it.
+     * @param file
+     * @return Array containing loaded Letters.
+     */
     private Letter[] readXML(String file) {
         Letter[] letters = null;
         try {
@@ -67,10 +72,13 @@ public class FontInit {
         return letters;
     }
     
+    /**
+     * This method takes all of the loaded letters in letts and saves single png file from each of them.
+     * @param source 
+     */
     private void savePNGs(String source) {
         try {
-            File exp = new File(PNGsToFONT.PATH+EXPORT);
-            exp.mkdir();
+            new File(PNGsToFONT.PATH+EXPORT).mkdir();
             BufferedImage im_source = ImageIO.read(new File(source));
             for (Letter l : letts) {
                 BufferedImage image = getCroppedImage(im_source.getSubimage(l.getX(), l.getY(), l.getWidth(), l.getHeight()));
@@ -83,15 +91,26 @@ public class FontInit {
         }
     }
     
+    /**
+     * This method handles situation, when we're setting new dimensions of letter.
+     * It prevents from a crash caused by empty letters.
+     * @param x
+     * @param y
+     * @return 
+     */
     private int handle(int x, int y) {
-        return (x - y < 0 ? y : x - y);
+        return (x - y < 0 ? Math.abs(y) : x - y);
     }
     
+    /**
+     * This method crops image to its minimum size.
+     * @param source
+     * @return Cropped image as BufferedImage object.
+     */
     public BufferedImage getCroppedImage(BufferedImage source) {
         int width = source.getWidth();
         int height = source.getHeight();
 
-//        int topY = Integer.MAX_VALUE, topX = Integer.MAX_VALUE;
         int topY = height, topX = width;
         int bottomY = -1, bottomX = -1;
         for (int y=0; y<height; y++) {
