@@ -61,7 +61,7 @@ public class PNGsToFONT {
     private boolean debug = false;
 
     public PNGsToFONT() {
-        debug = true;
+//        debug = true;
         if (!init(PATH)) {
             System.out.println("Nothing to be done! Exiting...");
             System.exit(0);
@@ -131,11 +131,9 @@ public class PNGsToFONT {
             }
         }
         System.out.println("Standard size set to "+m_w+" x "+m_h);
-//        int v = Math.max((int)Math.ceil(Math.sqrt(m_w*files.size())), (int)Math.ceil(Math.sqrt(m_h*files.size())));
         int v = (int)Math.round(Math.ceil(Math.sqrt(m_w*m_h*files.size())));
         int pow=0;
-        while (Math.pow(2, pow)<v) pow++;
-//        while (Math.pow(2, pow)<v || Math.floor(Math.pow(2, pow)/m_w)*m_h>Math.pow(2, pow)) pow++;
+        while (Math.pow(2, pow)<v || Math.ceil(files.size()/Math.floor(Math.pow(2, pow)/m_w))*m_h>Math.pow(2, pow)) pow++;
         
         return new int[]{m_w, m_h, (int)Math.pow(2, pow)};
     }
