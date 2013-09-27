@@ -4,6 +4,7 @@ package pngstofont;
 import java.awt.Color;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
+import java.awt.Point;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -34,7 +35,7 @@ import org.xml.sax.SAXException;
 /**
  * @author      Coder Kap' <fojjta.cekuj.net>
  * @date        13.9.2013
- * @version     13.09.13.23
+ * @version     13.09.24.21
  *
  * List of changes, pattern for version is year.month.day.hour:
  * ----------------------------------------------------------
@@ -45,22 +46,16 @@ import org.xml.sax.SAXException;
  * 13.09.16.0  - It can now load bitmap font from .fnt & .png, crop these chars, save them
  *               and then later it can again assemble them
  * 13.09.16.11 - Removed troubles with head of XML file.
+ * 13.09.24.21 - Work on GUI of this app.
+ * 13.09.27.17 - Work on GUI of this app - make new menu on the top of the main window.
  * 
  */
 public class PNGsToFONT {
     
-    /**
-     * Configuration part!
-     */
-    // Need to be configured on each computer:
-    public final static String PATH = "/home/kap/Plocha/mkfont/";
-    public final static String BMPOUTPUT = PATH+"font.png";
-    public final static String FNTOUTPUT = PATH+"font.fnt";
-    public final static String BMPINPUT = PATH+"input/"+"font.png";
-    public final static String FNTINPUT = PATH+"input/"+"font.fnt";
-    /**
-     * End of configuration part!
-     */
+    public final static String version = "13.09.27.17";
+    
+    private File bmp_in=null, fnt_in=null, bmp_out, fnt_out;
+    private File import_dir, export_dir;
     
     private final static String SUFFIX = ".png";
     
@@ -72,32 +67,52 @@ public class PNGsToFONT {
     private int[] outparams;
     private Letter[] letters;
     
+    public Point dimensions;
+    
     private boolean debug = false;
+    
+    private MainWindow mw;
+    
 
-    public PNGsToFONT() {
+    public PNGsToFONT(MainWindow mainwindow) {
 //        debug = true;
-        if (!init()) {
-            System.out.println("Nothing to be done! Exiting...");
-            System.exit(0);
-        }
-        process();
+        mw = mainwindow;
     }
     
+    /**
+     * Method for setup some needed parameters for creating bitmap font.
+     * @return True if there are some given letters.
+     */
     private boolean init() {
-        srcfiles = searchFolderForNumberedPNGFiles(PATH, SUFFIX, true);
+        if (getImportDir()==null) {
+            System.out.println("Please first set the import dir!");
+            mw.setStat("Please first set the import dir!");
+            return false;
+        }
+        srcfiles = searchFolderForNumberedPNGFiles(getImportDir().getAbsolutePath(), SUFFIX, true);
         if (srcfiles.isEmpty()) return false;
         srcfiles = sortFiles(srcfiles);
         outparams = goThrough(srcfiles);
         letters = new Letter[srcfiles.size()];
+//        letters = mw.letters;
         
         System.out.println(srcfiles.size()+" files will be processed.");
         for (File f : srcfiles) System.out.println("Input file: "+f.getName());
         return true;
     }
     
-    private void process() {
-        outputBitmap(outparams[0], outparams[1], outparams[2], srcfiles);
-        xmlWrite(letters, outparams[2]);
+    /**
+     * This method tries to create bitmap font from configured .png files and letters data field.
+     */
+    public String process() {
+        if (!init()) {
+            System.out.println("Nothing to be done! Exiting...");
+            return "Nothing to be done! Exiting...";
+//            System.exit(0);
+        }
+        outputBitmap(outparams[0], outparams[1], outparams[2], outparams[3], srcfiles);
+        xmlWrite(letters, outparams[2], outparams[3]);
+        return "Bitmap font was succesfully created!";
     }
     
     /**
@@ -140,7 +155,7 @@ public class PNGsToFONT {
         int m_w=0, m_h=0;
         for (int i=0; i<files.size(); i++) {
             try {
-                BufferedImage image = ImageIO.read(files.get(i));
+                BufferedImage image = mw.fi.getCroppedImage(ImageIO.read(files.get(i)));
                 m_w = Math.max(m_w, image.getWidth());
                 m_h = Math.max(m_h, image.getHeight());
             } catch (IOException ex) {
@@ -152,30 +167,45 @@ public class PNGsToFONT {
         int pow=0;
         while (Math.pow(2, pow)<v || Math.ceil(files.size()/Math.floor(Math.pow(2, pow)/m_w))*m_h>Math.pow(2, pow)) pow++;
         
-        return new int[]{m_w, m_h, (int)Math.pow(2, pow)};
+        return new int[]{m_w, m_h, (int)Math.pow(2, pow), (int)Math.pow(2, pow)};
     }
     
-    void outputBitmap(int width, int height, int dimensions, List<File> files) {
+    /**
+     * This method supposes, that dimensions are the same!
+     * It creates output png font image file created by concating all letters.
+     * 
+     * @param width Width of output png font image.
+     * @param height Height of output png font image.
+     * @param dimensionx
+     * @param dimensiony
+     * @param files List of png files to concat.
+     */
+    void outputBitmap(int width, int height, int dimensionx, int dimensiony, List<File> files) {
+        if (getBmpOutput()==null) {
+            System.out.println("Please initiate bmp output file!");
+            mw.setStat("Please first initiate bmp output file!");
+            return;
+        }
         try {
-            BufferedImage combined = new BufferedImage(dimensions, dimensions, BufferedImage.TYPE_INT_ARGB);
+            BufferedImage combined = new BufferedImage(dimensionx, dimensiony, BufferedImage.TYPE_INT_ARGB_PRE);
             // paint both images, preserving the alpha channels
             Graphics g = combined.getGraphics();
             
             int act_x, act_y, act_px=0, act_py=0;
             
-            int max_in_row = (int)Math.floor(dimensions/width);
+            int max_in_row = (int)Math.floor(dimensionx/width);
             System.out.println("Max number of letters in row is "+max_in_row);
             
             // for every letter - draw into combined & write to xml
             for (int i=0; i<files.size(); i++) {
-                BufferedImage image = ImageIO.read(files.get(i));
+                BufferedImage image = mw.fi.getCroppedImage(ImageIO.read(files.get(i)));
                 int letw = image.getWidth(), leth = image.getHeight();
                 
                 act_x=act_px*width; act_y=act_py*height;
                 
                 int char_value = Integer.parseInt(files.get(i).getName().replace(".png", ""));
                 
-                letters[i] = new Letter(char_value, act_x, act_y, letw, leth, XOFFSET, height-leth, (int)(letw/1.3), PAGE, CHNL);
+                letters[i] = new Letter(char_value, act_x, act_y, letw, leth, XOFFSET, height-leth-10, (int)(letw), PAGE, CHNL);
                 g.drawImage(image, act_x, act_y, null);
                 if (debug) {
                     g.setColor(Color.red);
@@ -190,19 +220,37 @@ public class PNGsToFONT {
             }
 
             // Save as new image
-            ImageIO.write(combined, "PNG", new File(BMPOUTPUT));
+            ImageIO.write(combined, "PNG", getBmpOutput());
         } catch (IOException ex) {
             Logger.getLogger(PNGsToFONT.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
     
+    boolean xmlWrite(Letter[] letters, int dimx, int dimy) {
+        dimensions = new Point(dimx, dimy);
+        return xmlWrite(letters);
+    }
     
-    void xmlWrite(Letter[] letters, int dimensions) {
+    /**
+     * Write given letters data into .fnt file with XML parser help.
+     * @param letters Field of letters to be processed into .fnt file.
+     */
+    boolean xmlWrite(Letter[] letters) {
+        if (dimensions == null) {
+            System.out.println("Please initiate dimensions!");
+            mw.setStat("Please initiate dimensions!");
+            return false;
+        }
+        if (getFntInput()==null || getBmpOutput()==null || getFntOutput()==null) {
+            System.out.println("Please initiate files!");
+            mw.setStat("Please first initiate input/output files!");
+            return false;
+        }
         try {
                 // First, load some information from original .fnt file.
                 DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
                 DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-                Document doc = dBuilder.parse(new File(FNTINPUT));
+                Document doc = dBuilder.parse(getFntInput());
                 doc.getDocumentElement().normalize();
                 
                 Node temp = doc.getElementsByTagName("info").item(0);
@@ -229,8 +277,8 @@ public class PNGsToFONT {
                 rootElement.appendChild(common);
                 for (int i=0; i<commonatribs.getLength(); i++)
                     common.setAttribute(commonatribs.item(i).getNodeName(), commonatribs.item(i).getNodeValue());
-                common.setAttribute("scaleW", dimensions+"");
-                common.setAttribute("scaleH", dimensions+"");
+                common.setAttribute("scaleW", dimensions.x+"");
+                common.setAttribute("scaleH", dimensions.y+"");
                 
 		// staff elements
 		Element pages = doc.createElement("pages");
@@ -239,7 +287,7 @@ public class PNGsToFONT {
                 Element page = doc.createElement("page");
                 pages.appendChild(page);
                 page.setAttribute("id", "0");
-                page.setAttribute("file", new File(BMPOUTPUT).getName());
+                page.setAttribute("file", getBmpOutput().getName());
                 
                 Element chars = doc.createElement("chars");
                 rootElement.appendChild(chars);
@@ -259,11 +307,11 @@ public class PNGsToFONT {
                 transformer.setOutputProperty(OutputKeys.INDENT, "yes");
                 
 		DOMSource source = new DOMSource(doc);
-		StreamResult result = new StreamResult(new File(FNTOUTPUT));
+		StreamResult result = new StreamResult(getFntOutput());
  
 		transformer.transform(source, result);
  
-		System.out.println("File "+FNTOUTPUT+" saved!");
+		System.out.println("File "+getFntOutput().getAbsolutePath()+" saved!");
  
 	  } catch (ParserConfigurationException | TransformerException pce) {
               System.err.println("Error: "+pce);
@@ -272,14 +320,12 @@ public class PNGsToFONT {
         } catch (IOException ex) {
             Logger.getLogger(PNGsToFONT.class.getName()).log(Level.SEVERE, null, ex);
         }
+        return true;
     }
     
-    
-    public static void main(String[] args) {
-        new PNGsToFONT();
-    }
-
-
+    /**
+     * Comparator for integer files names.
+     */
     public class ObjectComparator implements Comparator<File> {
 
         @Override
@@ -290,5 +336,41 @@ public class PNGsToFONT {
         }
 
     }
+    
+    public void setFntInput(File fntinput) {
+        fnt_in=fntinput;
+    }
+    
+    public void setBmpInput(File bmpinput) {
+        bmp_in=bmpinput;
+    }
 
+    public void setFntOutput(File fnt_out) {
+        this.fnt_out = fnt_out;
+    }
+
+    public void setBmpOutput(File bmp_out) {
+        this.bmp_out = bmp_out;
+    }
+
+    public void setImportDir(File import_dir) {
+        this.import_dir = import_dir;
+    }
+
+    public void setExportDir(File export_dir) {
+        this.export_dir = export_dir;
+    }
+    
+    public File getBmpInput() { if (bmp_in==null) return mw.getFontFiles()[0]; return bmp_in; }
+    
+    public File getFntInput() { if (fnt_in==null) return mw.getFontFiles()[1]; return fnt_in; }
+
+    public File getBmpOutput() { if (export_dir==null) return mw.getExportDir(); return new File(export_dir.getAbsolutePath(), "font.png"); }
+
+    public File getFntOutput() { if (export_dir==null) return mw.getExportDir(); return new File(export_dir.getAbsolutePath(), "font.fnt"); }
+
+    public File getImportDir() { if (import_dir==null) return mw.getImportDir(); return import_dir; }
+
+    public File getExportDir() { if (export_dir==null) return mw.getExportDir(); return export_dir; }
+    
 }
